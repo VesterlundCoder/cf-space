@@ -167,7 +167,9 @@ def parse_args():
     p.add_argument("--freeze_encoder", action="store_true",
                    help="Freeze encoder+bottleneck (recommended for target_train)")
     p.add_argument("--ablate_k",       action="store_true",
-                   help="Run ae_pretrain for k in {2,3,4,6} and save summary")
+                   help="Run ae_pretrain for k in {2,3,4,5,6,7} and save summary")
+    p.add_argument("--ablate_ks",      type=str, default=None,
+                   help="Comma-separated custom k list, e.g. '3,4,5,6,7'")
     p.add_argument("--device",         default="auto")
     p.add_argument("--ablate_epochs",  type=int, default=None,
                    help="Epoch count override for each ablation run")
@@ -300,11 +302,17 @@ def main(args=None):
 
 
 def run_ablate_k(args, device: str):
-    """Run ae_pretrain for k in {2,3,4,6} and save a summary JSON."""
+    """Run ae_pretrain for k in {2,3,4,5,6,7} and save a summary JSON."""
     ckpt_dir = Path("ckpt")
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     epochs   = args.ablate_epochs or args.epochs
     summary  = []
+
+    # Allow custom k list via --ablate_ks "3,4,5,6,7"
+    if getattr(args, "ablate_ks", None):
+        k_grid = [int(x) for x in args.ablate_ks.split(",")]
+    else:
+        k_grid = [2, 3, 4, 5, 6, 7]
 
     ds    = CFDataset(args.data, n_components=args.n_components)
     n_val = int(len(ds) * args.val_frac)
@@ -317,7 +325,7 @@ def run_ablate_k(args, device: str):
     val_loader   = DataLoader(val_ds,   batch_size=args.batch, shuffle=False,
                               drop_last=False, num_workers=0)
 
-    for k in [2, 3, 4, 6]:
+    for k in k_grid:
         print(f"\n{'='*60}\nAblation k={k} ({epochs} epochs)\n{'='*60}")
         save_path = ckpt_dir / f"got_v3_ae_pretrain_k{k}.pt"
         model = GOTv3(
