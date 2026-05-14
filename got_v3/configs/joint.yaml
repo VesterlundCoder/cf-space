@@ -1,0 +1,12 @@
+mode: joint
+k: 3
+d_model: 128
+layers: 4
+heads: 8
+epochs: 40
+batch: 512
+lr: 5.0e-5
+dropout: 0.1
+n_components: 20
+val_frac: 0.1
+freeze_encoder: false

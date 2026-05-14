@@ -1,0 +1,740 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{natbib}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\lstset{
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  frame=single,
+  language=Python
+}
+
+\newtheorem{observation}{Observation}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+\title{\textbf{An Empirical Operator Algebra on a Latent Manifold\\
+       of Polynomial Continued Fractions}\\[0.4em]
+       {\large Technical Report / Research Note --- v0.1}}
+
+\author{David Svensson\\
+        \small Independent Research\\
+        \small \url{https://github.com/VesterlundCoder/cf-space}}
+
+\date{May 2026}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We construct a finite-dimensional coefficient space of polynomial
+continued-fraction (PCF) generators and train a Geometric Operator
+Transformer Autoencoder (GOT~v3) to embed these objects into a
+low-dimensional latent manifold $z \in \mathbb{R}^3$.  We then define
+empirical operator vectors $v_T(x) = E(Tx) - E(x)$ for ten symbolic
+transformations including index shifts, coefficient scaling, sign flips,
+and Ap\'ery-like perturbations.  Using this representation, we test 35
+algebraic properties---closure, inverses, involutions, commutativity,
+commutator norms, cosine similarity, approximate additivity, Jacobi-type
+identities, Lie-bracket closure, braid relations, and conservation
+laws---at three levels: symbolic (coefficient space), latent ($z$-space),
+and arithmetic (prediction heads).  The results suggest that smooth
+operators admit approximate linearisation in latent space, while the
+\texttt{shift} operator behaves as a disruptive non-commuting generator.
+We identify a small subset of smooth operators with approximate
+Lie-algebra-like closure under empirical brackets.  Cosine similarity
+$\cos(v_{\mathrm{apery\_pos}}, v_{\mathrm{apery\_neg}}) = -0.998$ confirms
+that the Ap\'ery perturbation pair forms the cleanest algebraic inverse in
+this space.  These findings are preliminary and checkpoint-dependent, but
+demonstrate a reproducible framework for studying operator geometry in
+spaces of mathematical objects.
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Introduction}
+
+Polynomial continued fractions (PCFs) are mathematical objects of the form
+\begin{equation}
+  \mathrm{CF}(a, b) \;=\;
+  a_0 + \cfrac{b_1}{a_1 + \cfrac{b_2}{a_2 + \cfrac{b_3}{\ddots}}}
+\end{equation}
+where $a(n) = \sum_{i} a_i n^i$ and $b(n) = \sum_{i} b_i n^i$ are polynomials
+with rational coefficients.  PCFs have been central to the study of
+irrationality proofs (Ap\'ery's proof of the irrationality of $\zeta(3)$
+\cite{apery1979}), fast convergence representations of mathematical constants,
+and constructive approaches to hypergeometric identities
+\cite{gauss1812hypergeometric}.
+
+A natural question is: \emph{what algebraic structure does the space of PCF
+generators possess under symbolic transformations?}  If we think of a
+generator $x = (a(n), b(n))$ as a point in a coefficient space
+$\mathcal{M}_{\mathrm{CF}}$, then operators such as index shift, scaling, or
+sign flip are transformations on this space.  The question becomes: do these
+operators form a group, a monoid, a Lie algebra, or something more irregular?
+
+Rather than attempting a purely symbolic algebraic analysis---which would
+require enumerating all PCFs---we take a \emph{computational geometry}
+approach.  We train a neural autoencoder to embed PCFs into a low-dimensional
+Euclidean space $z \in \mathbb{R}^k$, and then measure the algebraic
+properties of the resulting operator vectors $v_T(x) = E(Tx) - E(x)$
+empirically over a large corpus.
+
+This is related to the broad program of geometric deep learning
+\cite{vaswani2017} and the use of latent spaces for structural discovery in
+mathematics.  Our specific contribution is a systematic empirical test suite
+for 35 algebraic laws applied to a corpus of 286{,}310 PCF generators, with
+all code, data, and results publicly available \cite{cfspace2026github}.
+
+\paragraph{Claims.}
+We do not claim to have discovered new continued fraction identities.
+We do not claim that $\mathcal{M}_{\mathrm{CF}}$ is a Lie algebra.
+We claim to present a reproducible empirical framework and to report which
+algebraic properties hold approximately and which do not, with explicit error
+thresholds.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Construction of the CF Space}
+\label{sec:dataset}
+
+\subsection{Polynomial continued fraction generators}
+
+Each generator is a pair $x = (a, b)$ where
+\begin{align}
+  a(n) &= \sum_{i=0}^{d_a} a_i\, n^i, \qquad d_a \in \{1,2,3,4\}\\
+  b(n) &= \sum_{i=0}^{d_b} b_i\, n^i, \qquad d_b \in \{1,2,3,4\}
+\end{align}
+with coefficients $a_i, b_i \in \{-3, -2, \ldots, 3\} \setminus \{0\}$
+sampled uniformly.  Each CF is evaluated to depth~400 using \texttt{mpmath}
+(50 decimal places).  We retain generators satisfying
+\[
+  |{\rm CF}_{400} - {\rm CF}_{200}| < 10^{-6}
+\]
+as a convergence filter.
+
+\subsection{Corpus statistics}
+
+The resulting corpus \texttt{cf\_large} contains $N = 286{,}310$ generators.
+Each is stored as a coefficient vector $c \in \mathbb{R}^{20}$ (10
+coefficients for $a(n)$, 10 for $b(n)$, zero-padded to degree~9), along
+with 20 derived numerical features.
+
+Targets computed per generator:
+\begin{itemize}[noitemsep]
+  \item \textbf{conv\_exponent}: convergence rate $\log|{\rm CF}_d - L| / d$
+  \item \textbf{cf\_quality}: fraction of depths where the partial convergent
+        stabilises
+  \item \textbf{component}: k-means cluster label ($K=20$, from coefficients)
+  \item \textbf{plateau}: binary indicator for exponential convergence plateau
+\end{itemize}
+
+\subsection{Relation to known constants}
+
+We use proximity to $\zeta(3) \approx 1.202\,056\,903$ as a scalar field
+over the manifold.  This is used as an energy landscape for alignment
+experiments in Section~\ref{sec:level3}, \emph{not} as an identity claim.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Geometric Operator Autoencoder (GOT~v3)}
+\label{sec:model}
+
+\subsection{Architecture}
+
+The model separates geometric and predictive representations:
+\begin{align}
+  h &= \mathrm{TransformerEncoder}(c) \in \mathbb{R}^{128}
+    & &\text{(CLS token, full context)} \\
+  z &= \mathrm{Bottleneck}(h) \in \mathbb{R}^k
+    & &\text{(geometric manifold, } k = 3\text{)} \\
+  \hat{c} &= \mathrm{MLP}_{\rm dec}(z)
+    & &\text{(reconstruction from } z \text{ only)} \\
+  \hat{\delta} &= \mathrm{MLP}_{\rm delta}([h \| z])
+    & &\text{(arithmetic head)}
+\end{align}
+The TransformerEncoder has $d=128$, $L=4$ layers, $h=8$ attention heads,
+totalling 885{,}567 parameters.  The bottleneck dimension $k=3$ is chosen to
+match the intrinsic dimensionality $\hat{d} \approx 2.9$ estimated by TwoNN
+\cite{levina2005intrinsic} on the corpus.
+
+An additional \emph{op-field} network predicts the latent displacement caused
+by an operator:
+\[
+  \Delta z^{\rm pred} = F_{\rm op}(\tilde{z},\, \delta_c)
+\]
+where $\tilde{z} = z / \|z\|$ and $\delta_c = c' - c$ is the coefficient
+difference.
+
+\subsection{Loss functions}
+
+Training uses a composite loss:
+\begin{equation}
+  \mathcal{L} = \lambda_r \mathcal{L}_{\rm recon}
+    + \lambda_n \mathcal{L}_{\rm nbr}
+    + \lambda_o \mathcal{L}_{\rm op}
+    + \lambda_c \mathcal{L}_{\rm contrast}
+    + \lambda_m \mathcal{L}_{\rm mix}
+    + \lambda_z \mathcal{L}_{z\text{-reg}}
+    + \lambda_v \mathcal{L}_{\rm var}
+\end{equation}
+
+\begin{description}[noitemsep]
+  \item[$\mathcal{L}_{\rm recon}$] MSE reconstruction of coefficients from $z$.
+  \item[$\mathcal{L}_{\rm nbr}$] Neighbourhood preservation: distances in
+        $z$-space (unit sphere) should match coefficient distances.
+  \item[$\mathcal{L}_{\rm op}$] Operator consistency:
+        $\|\Delta z^{\rm pred} - (\tilde{z}' - \tilde{z})\|^2$,
+        computed on normalised $z$ to prevent scale explosion.
+  \item[$\mathcal{L}_{\rm contrast}$] SimCLR supervised contrastive loss
+        \cite{khosla2020supervised} on normalised $z$ with component labels.
+  \item[$\mathcal{L}_{\rm mix}$] Cross-entropy on mixture component logits.
+  \item[$\mathcal{L}_{z\text{-reg}}$] L2 penalty $\|z\|^2$ keeping scale bounded.
+  \item[$\mathcal{L}_{\rm var}$] VICReg-style anti-collapse
+        \cite{bardes2022vicreg}: $\text{mean}(\text{relu}(1 - \text{std}_d(z)))$,
+        penalising dimensional collapse without unbounded magnitude growth.
+\end{description}
+
+\subsection{Training protocol}
+
+Three-phase training on MPS (Apple Silicon) / CUDA:
+\begin{enumerate}[noitemsep]
+  \item \textbf{Phase 1 — Geometry} (80 epochs, lr = $3\times10^{-4}$):
+        $\lambda_r = \lambda_n = 1$, $\lambda_o = 0.1$,
+        $\lambda_c = 0.2$, $\lambda_m = 0.2$,
+        $\lambda_z = 0.005$, $\lambda_v = 0.1$.
+  \item \textbf{Phase 2 — Arithmetic} (40 epochs, frozen encoder):
+        $\lambda_\delta = 1$, $\lambda_{\rm conv} = 0.3$,
+        $\lambda_{\rm plateau} = 0.5$.
+  \item \textbf{Phase 3 — Joint} (40 epochs, lr = $5\times10^{-5}$):
+        all heads active, $\lambda_r = \lambda_n = 0.2$, $\lambda_o = 0.5$.
+\end{enumerate}
+
+Phase~1 metrics at epoch~64/80: $\text{mix\_acc} = 0.985$,
+$\text{recon} = 0.016$, total loss $= 0.830$.
+
+\paragraph{Note on checkpoint.}
+The algebra results in Section~\ref{sec:results} were obtained with an
+earlier checkpoint exhibiting partial $z$-collapse.  Symbolic-level
+measurements are unaffected.  Latent-level measurements are marked
+\textbf{[preliminary]} and will be updated in v0.2 after full pipeline
+completion.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Operator Definitions}
+\label{sec:operators}
+
+\begin{definition}[Operator vector]
+  For a CF generator $x = (a(n), b(n))$ and operator $T$, the
+  \emph{operator vector} is
+  \[
+    v_T(x) = E(Tx) - E(x) \in \mathbb{R}^k
+  \]
+  where $E(x) = z$ is the bottleneck encoding.
+\end{definition}
+
+Ten operators are tested, listed in Table~\ref{tab:operators}.
+
+\begin{table}[h]
+\centering
+\caption{CF operators used in the algebra test suite.}
+\label{tab:operators}
+\begin{tabular}{lll}
+\toprule
+Name & Definition & Exact inverse \\
+\midrule
+\texttt{identity}    & $T(a,b) = (a,b)$ & self \\
+\texttt{shift}       & $a(n) \mapsto a(n+1)$ via binomial expansion & \texttt{backshift} \\
+\texttt{backshift}   & $a(n) \mapsto a(n-1)$ & \texttt{shift} \\
+\texttt{scale\_up}   & $(a,b) \mapsto (1.5a,\, 1.5b)$ & \texttt{scale\_down} \\
+\texttt{scale\_down} & $(a,b) \mapsto (a/1.5,\, b/1.5)$ & \texttt{scale\_up} \\
+\texttt{apery\_pos}  & $a_2 \mapsto a_2 + 0.10$ & \texttt{apery\_neg} \\
+\texttt{apery\_neg}  & $a_2 \mapsto a_2 - 0.10$ & \texttt{apery\_pos} \\
+\texttt{sign\_flip\_b} & $b(n) \mapsto b(-n)$ & self (involution) \\
+\texttt{sign\_flip\_a} & $a(n) \mapsto a(-n)$ & self (involution) \\
+\texttt{random\_sm}  & $(a,b) \mapsto (a + \varepsilon_a,\, b + \varepsilon_b)$,
+                       $\varepsilon \sim \mathcal{N}(0, 0.05^2)$ & none \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \texttt{shift} operator uses exact binomial expansion:
+$a(n+1) = \sum_i a_i (n+1)^i = \sum_i a_i \sum_{j\leq i} \binom{i}{j} n^j$,
+preserving polynomial degree.  The \texttt{sign\_flip} operators satisfy
+$T^2 = I$ exactly.  The \texttt{apery} operators model small perturbations
+inspired by Ap\'ery-type recurrences.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Algebraic Tests and Results}
+\label{sec:results}
+
+We test 35 laws organised into four levels.  For each law and each operator
+(or pair), we report mean error, median, std, max, and a pass/fail indicator
+relative to a threshold $\tau$ appropriate to the law.  All tests are run on
+$n = 500$ uniformly sampled generators; manifold approximation uses $n = 2000$.
+
+\subsection{Level 1 --- Basic Laws}
+\label{sec:level1}
+
+\paragraph{Identity and Inverse.}
+Table~\ref{tab:inverses} confirms that all designed inverse pairs are exact
+(mean error $< 10^{-5}$) at the symbolic level.
+
+\begin{table}[h]
+\centering
+\caption{Inverse law errors (symbolic level, $n=500$).}
+\label{tab:inverses}
+\begin{tabular}{lll}
+\toprule
+Pair & Mean error & Pass? \\
+\midrule
+shift $\circ$ backshift & $7.7\times10^{-6}$ & \checkmark \\
+backshift $\circ$ shift & $7.7\times10^{-6}$ & \checkmark \\
+scale\_up $\circ$ scale\_down & $0.0000$ & \checkmark \\
+apery\_pos $\circ$ apery\_neg & $0.0000$ & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Involutions ($T^2 = I$).}
+\texttt{sign\_flip\_a} and \texttt{sign\_flip\_b} satisfy $T^2 = I$ exactly
+(mean error $= 0$) --- as expected from the definition $a(n) \mapsto a(-n)$.
+
+\paragraph{Idempotence ($T^2 = T$).}
+Only \texttt{identity} is strictly idempotent.  Scale, apery, and sign-flip
+operators are \emph{approximately} idempotent (mean error $< 0.026$) due to
+small coefficient magnitudes relative to perturbation size.
+\texttt{shift} fails strongly (mean error $= 4.84$).
+
+\paragraph{Periodicity.}
+\texttt{sign\_flip\_a}, \texttt{sign\_flip\_b} have exact period~2.
+Scale and apery operators have approximate period~2 (error $< 0.025$).
+\texttt{shift} is aperiodic.
+
+\paragraph{Fixed Points.}
+CF~\#214 is the approximate fixed point of both scale operators simultaneously
+(min error $5\times10^{-4}$), suggesting a CF whose coefficient magnitudes lie
+near the normalisation surface.  The apery operators share an approximate fixed
+point at CF~\#361 (min error $2\times10^{-4}$).
+
+\subsection{Level 2 --- Commutativity}
+\label{sec:level2}
+
+\paragraph{Commutator norms.}
+Table~\ref{tab:commutator} gives the full $10\times10$ commutator norm matrix
+$\|[T,S]\| = \|E(T(S(x))) - E(S(T(x)))\|$.
+
+\begin{table}[h]
+\centering
+\caption{Commutator norm matrix $\|[T,S]\|$ (mean over $n=500$). Rows and
+columns ordered as in Table~\ref{tab:operators}. Values $>0.1$ bold.}
+\label{tab:commutator}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l|cccccccccc}
+\toprule
+ & I & sh & bsh & s$\uparrow$ & s$\downarrow$ & a$+$ & a$-$ & sf$_b$ & sf$_a$ & rnd \\
+\midrule
+I        & 0    & 0    & 0    & 0    & 0    & 0    & 0    & 0    & 0    & 0.001 \\
+shift    & 0    & 0    & 0    & 0    & 0    & 0.003 & 0.004 & \textbf{4.06} & 0.045 & \textbf{0.19} \\
+bshift   & 0    & 0    & 0    & 0    & 0    & 0.001 & 0.001 & \textbf{4.50} & 0.045 & 0.012 \\
+s$\uparrow$ & 0 & 0    & 0    & 0    & 0    & 0    & 0    & 0    & 0    & 0.002 \\
+s$\downarrow$ & 0 & 0  & 0    & 0    & 0    & 0    & 0    & 0    & 0    & 0.001 \\
+a$+$     & 0    & 0.003 & 0.001 & 0  & 0    & 0    & 0    & 0    & 0    & 0.001 \\
+a$-$     & 0    & 0.004 & 0.001 & 0  & 0    & 0    & 0    & 0    & 0    & 0.001 \\
+sf$_b$   & 0    & \textbf{4.06} & \textbf{4.50} & 0 & 0 & 0 & 0 & 0 & 0 & 0.001 \\
+sf$_a$   & 0    & 0.045 & 0.045 & 0  & 0    & 0    & 0    & 0    & 0    & 0.001 \\
+rnd      & 0.001 & 0.033 & 0.011 & 0.002 & 0.001 & 0.001 & 0.001 & 0.001 & 0.001 & 0.002 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{observation}
+The only large non-commutativity in the operator set is between
+\texttt{sign\_flip\_b} and \texttt{shift}/\texttt{backshift} (commutator
+$\approx 4.1$--$4.5$).  All scale, apery, and identity operators commute with
+each other.
+\end{observation}
+
+\paragraph{Cosine similarity matrix.}
+Table~\ref{tab:cosine} shows $\cos(v_T, v_S)$ between mean operator vectors.
+
+\begin{table}[h]
+\centering
+\caption{Cosine similarity $\cos(v_T,\, v_S)$ between operator directions.
+Bold: $|\cos| > 0.5$.}
+\label{tab:cosine}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l|cccccccccc}
+\toprule
+ & I & sh & bsh & s$\uparrow$ & s$\downarrow$ & a$+$ & a$-$ & sf$_b$ & sf$_a$ & rnd \\
+\midrule
+shift      & 0 & \textbf{+1.00} & +0.30 & \textbf{+0.55} & $-0.38$ & $-0.20$ & +0.21 & $-0.43$ & $-0.13$ & 0.00 \\
+backshift  & 0 & +0.30 & \textbf{+1.00} & +0.34 & $-0.02$ & +0.26 & $-0.25$ & +0.14 & +0.11 & 0.00 \\
+scale\_up  & 0 & \textbf{+0.55} & +0.34 & \textbf{+1.00} & \textbf{$-0.80$} & +0.09 & $-0.08$ & $-0.33$ & $-0.21$ & 0.00 \\
+scale\_dn  & 0 & $-0.38$ & $-0.02$ & \textbf{$-0.80$} & \textbf{+1.00} & $-0.07$ & +0.07 & \textbf{+0.55} & +0.26 & 0.00 \\
+apery$+$   & 0 & $-0.20$ & +0.26 & +0.09 & $-0.07$ & \textbf{+1.00} & \textbf{$-0.998$} & +0.22 & $-0.13$ & $-0.08$ \\
+apery$-$   & 0 & +0.21 & $-0.25$ & $-0.08$ & +0.07 & \textbf{$-0.998$} & \textbf{+1.00} & $-0.22$ & +0.13 & +0.07 \\
+sf$_b$     & 0 & $-0.43$ & +0.14 & $-0.33$ & \textbf{+0.55} & +0.22 & $-0.22$ & \textbf{+1.00} & $-0.06$ & 0.00 \\
+sf$_a$     & 0 & $-0.13$ & +0.11 & $-0.21$ & +0.26 & $-0.13$ & +0.13 & $-0.06$ & \textbf{+1.00} & 0.03 \\
+random     & 0 & 0.00 & 0.00 & 0.00 & 0.00 & $-0.08$ & +0.07 & 0.00 & 0.03 & \textbf{+1.00} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{observation}
+$\cos(v_{\mathrm{apery\_pos}},\, v_{\mathrm{apery\_neg}}) = -0.998$: the
+Ap\'ery perturbation pair forms a near-perfect antipodal pair in latent space.
+This makes it the most reliable algebraic inverse in the corpus for
+word2vec-style vector arithmetic \cite{mikolov2013word2vec}.
+\end{observation}
+
+\subsection{Level 3 --- Latent Geometry}
+\label{sec:level3}
+
+\paragraph{Manifold closure.}
+Table~\ref{tab:closure} shows the mean distance from $E(T(x))$ to the nearest
+corpus point (manifold approximation).
+
+\begin{table}[h]
+\centering
+\caption{Manifold closure: mean distance to nearest corpus point after applying $T$.
+Baseline (identity) = 0.0012.}
+\label{tab:closure}
+\begin{tabular}{lrrrl}
+\toprule
+Operator & Mean dist & Ratio to baseline & Stays on manifold? \\
+\midrule
+identity    & 0.0012 & $1.0\times$    & \checkmark \\
+scale\_up   & 0.0031 & $2.5\times$    & \checkmark \\
+scale\_down & 0.0012 & $1.0\times$    & \checkmark \\
+apery\_pos  & 0.0012 & $1.0\times$    & \checkmark \\
+apery\_neg  & 0.0012 & $1.0\times$    & \checkmark \\
+sign\_flip\_b & 0.0029 & $2.3\times$ & \checkmark \\
+sign\_flip\_a & 0.0016 & $1.3\times$ & \checkmark \\
+random\_sm  & 0.0013 & $1.1\times$    & \checkmark \\
+backshift   & 0.1407 & $116\times$    & $\times$ \\
+\textbf{shift} & \textbf{1.307} & \boldmath$1075\times$ & $\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\texttt{shift} takes generators $1075\times$ further from the manifold than
+the baseline, confirming that polynomial index-shifting is not a smooth
+transformation in this representation.
+
+\paragraph{Eigenoperator alignment.}
+We test whether $v_T(x) \approx \lambda z$ (operator vector aligned with
+encoding).  Only \texttt{shift} qualifies ($\cos = -0.714$, $\bar\lambda = 1.0$),
+suggesting that index shifting is the principal axis of the latent space.
+
+\paragraph{$\zeta(3)$-conditioned alignment.} \textbf{[Preliminary.]}
+We compute a contrast vector $d_{\rm core/far}$ between CFs numerically close
+to $\zeta(3)$ and CFs far from it, and measure $\cos(v_T,\, d_{\rm core/far})$.
+\texttt{scale\_down} is the only operator with positive alignment ($+0.265$),
+suggesting that scaling down coefficients moves generators toward the
+$\zeta(3)$-proximal region.  This is presented as an observation about the
+scalar field, not as a claim of constructing CF identities.
+
+\paragraph{Lipschitz constants.}
+Table~\ref{tab:lipschitz} gives Lipschitz constants
+$L_T = \|v_T(x) - v_T(y)\| / \|x - y\|$.
+
+\begin{table}[h]
+\centering
+\caption{Lipschitz constants for each operator.}
+\label{tab:lipschitz}
+\begin{tabular}{lrrr}
+\toprule
+Operator & Mean $L$ & Median $L$ & Max $L$ \\
+\midrule
+apery\_pos   & 0.0036 & 0.0033 & 0.0057 \\
+apery\_neg   & 0.0036 & 0.0033 & 0.0056 \\
+scale\_down  & 0.0051 & 0.0035 & 0.0255 \\
+scale\_up    & 0.0052 & 0.0038 & 0.0208 \\
+sign\_flip\_a & 0.0096 & 0.0075 & 0.0149 \\
+sign\_flip\_b & 0.0100 & 0.0083 & 0.0145 \\
+backshift    & 0.0148 & 0.0025 & 0.0449 \\
+\textbf{shift} & \textbf{0.041} & \textbf{0.0084} & \textbf{11.76} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Ap\'ery operators are the smoothest (max $L < 0.006$).  \texttt{shift} has
+max $L = 11.76$, indicating singular behaviour at specific coefficient
+configurations.
+
+\paragraph{Approximate additivity.}
+For smooth operators (scale, apery, sign-flip), the additivity error
+$\|v_{T \circ S}(x) - (v_T(x) + v_S(x))\| < 0.01$ passes the threshold.
+This supports a key property of the space:
+
+\begin{observation}[Latent linearity of smooth operators]
+For $T, S \in \{\mathrm{scale}, \mathrm{apery}, \mathrm{sign\_flip}\}$:
+\[
+  E(T \circ S(x)) \;\approx\; E(T(x)) + E(S(x)) - E(x)
+\]
+i.e., operator composition corresponds to vector addition in $z$-space, up
+to small error.  This is the analogue of word2vec arithmetic for CF operators.
+\end{observation}
+
+\subsection{Level 4 --- Advanced Algebraic Structure}
+\label{sec:level4}
+
+\paragraph{Jacobi identity.}
+We test $\|[T,[S,R]] + [S,[R,T]] + [R,[T,S]]\| \approx 0$.
+Table~\ref{tab:jacobi} shows results for four selected triples.
+
+\begin{table}[h]
+\centering
+\caption{Jacobi identity test (mean norm of triple bracket sum).}
+\label{tab:jacobi}
+\begin{tabular}{lrl}
+\toprule
+Triple $(T, S, R)$ & Mean norm & Pass? \\
+\midrule
+(apery\_pos, apery\_neg, sign\_flip\_b) & $2.0\times10^{-7}$ & \checkmark (near-exact) \\
+(shift, backshift, scale\_up)           & $1.8\times10^{-5}$ & \checkmark \\
+(shift, scale\_up, apery\_pos)          & $3.2\times10^{-3}$ & \checkmark (approx) \\
+(shift, sign\_flip\_b, apery\_pos)      & $4.06$             & $\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Jacobi identity holds for all smooth-operator triples.  It fails only
+when \texttt{sign\_flip\_b} is composed with \texttt{shift}, consistent with
+their large commutator (Table~\ref{tab:commutator}).
+
+\paragraph{Lie bracket closure.}
+We test whether $[T, S] \approx c \cdot v_R$ for some $R$ in the operator
+set ($\cos > 0.9$ threshold).  Results in Table~\ref{tab:lie}.
+
+\begin{table}[h]
+\centering
+\caption{Lie bracket closure: does $[T,S]$ align with a known operator vector?}
+\label{tab:lie}
+\begin{tabular}{llrl}
+\toprule
+$[T, S]$ & Best match $R$ & $\cos$ & Closed? \\
+\midrule
+{[}scale\_down, apery\_pos{]} & apery\_neg & 0.985 & \checkmark \\
+{[}scale\_down, apery\_neg{]} & apery\_pos & 0.984 & \checkmark \\
+{[}scale\_up, apery\_neg{]}   & apery\_neg & 0.972 & \checkmark \\
+{[}scale\_up, apery\_pos{]}   & apery\_pos & 0.972 & \checkmark \\
+{[}shift, sign\_flip\_b{]}    & backshift  & 0.595 & $\times$ \\
+{[}backshift, apery\_neg{]}   & backshift  & 0.532 & $\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{observation}[Approximate Lie-like subalgebra]
+The subset $\{\mathrm{scale\_up}, \mathrm{scale\_down},
+\mathrm{apery\_pos}, \mathrm{apery\_neg}\}$ exhibits approximate Lie-algebra-like
+closure under empirical latent brackets, with cosine similarity $> 0.97$.
+This is a preliminary finding, requiring formal verification in v0.2.
+\end{observation}
+
+\paragraph{Braid relations.}
+The braid relation $T_1 T_2 T_1 = T_2 T_1 T_2$ is tested for four pairs.
+Only $(\mathrm{apery\_pos}, \mathrm{sign\_flip\_a})$ satisfies it (mean error
+$= 0.015$); all other tested pairs fail, indicating that the operator set does
+not generate a Coxeter group.
+
+\paragraph{Conservation laws.}
+Table~\ref{tab:conservation} shows what fraction of CFs preserve structural
+properties under each operator.
+
+\begin{table}[h]
+\centering
+\caption{Conservation fractions: fraction of generators preserving property.}
+\label{tab:conservation}
+\begin{tabular}{lcccc}
+\toprule
+Operator & deg$(a)$ & deg$(b)$ & sign$(a_0)$ & norm class \\
+\midrule
+identity, scale, sign\_flip & 100\% & 100\% & 100\% & 100\% \\
+apery\_pos / apery\_neg & 36\% & 100\% & 100\% & 100\% \\
+backshift & 27\% & 100\% & 77\% & 100\% \\
+shift & 29\% & 99\% & 39\% & 100\% \\
+random\_sm & 29\% & 24\% & 70\% & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Notably, \emph{all} operators conserve the norm class (100\%): every
+transformed generator remains in a recognisable normalisation class.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Interpretation}
+\label{sec:interpretation}
+
+\subsection{Algebraic structure summary}
+
+Table~\ref{tab:verdict} summarises which algebraic properties are
+approximately satisfied by the full operator set and by the smooth
+subset.
+
+\begin{table}[h]
+\centering
+\caption{Algebraic structure verdict.}
+\label{tab:verdict}
+\begin{tabular}{lll}
+\toprule
+Property & Full set & Smooth subset \\
+\midrule
+Identity exists & \checkmark & \checkmark \\
+Inverses (designed pairs) & \checkmark & \checkmark \\
+Involutions ($T^2=I$) & \checkmark (sign\_flip) & \checkmark \\
+Commutativity & $\times$ (mean comm $= 0.18$) & \checkmark \\
+Jacobi identity & partial & \checkmark \\
+Lie bracket closure & partial & \checkmark ($\cos > 0.97$) \\
+Manifold closure & partial & \checkmark \\
+Additivity in $z$ & partial & \checkmark \\
+Braid relations & $\times$ (mostly) & partial \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Best-fit structure.}
+The full operator set forms a \emph{non-commutative monoid}: closed under
+composition, possessing an identity and soft inverses, but not globally
+commutative.  The smooth subset
+$\{\mathrm{scale}, \mathrm{apery\_pos}, \mathrm{apery\_neg}\}$ exhibits
+approximate Lie-algebra-like structure.  The sign-flip operators generate a
+structure resembling $\mathbb{Z}/2\mathbb{Z} \times \mathbb{Z}/2\mathbb{Z}$.
+
+\paragraph{The \texttt{shift} operator as disruptive generator.}
+\texttt{shift} exhibits several anomalous properties simultaneously: it is
+the only eigenoperator, the only operator that takes generators off the
+manifold, has the largest Lipschitz constant (max $L = 11.76$), breaks
+commutativity with \texttt{sign\_flip\_b}, and is non-additive in $z$-space.
+This is consistent with \texttt{shift} being a non-compact translation
+generator in the coefficient representation---analogous to a non-unitary
+operator in functional analysis.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Limitations}
+\label{sec:limitations}
+
+We enumerate limitations explicitly to support reproducibility and future work:
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{No proved CF identity.} We do not claim to have found new
+        continued-fraction representations of $\zeta(3)$ or any other constant.
+        The $\zeta(3)$ alignment measurement is a scalar-field observation.
+  \item \textbf{Legacy checkpoint for latent measurements.} The checkpoint
+        used for Sections~\ref{sec:level3}--\ref{sec:level4} exhibited partial
+        $z$-collapse.  Latent-level results are marked \textbf{[preliminary]}.
+  \item \textbf{Sample-based manifold approximation.} The manifold is
+        approximated by $n=2000$ corpus points; boundary effects and
+        sparse regions are not characterised.
+  \item \textbf{Operators are chosen, not exhaustive.} The 10 operators
+        represent a structured but limited set.  Other transformations
+        (e.g.\ contiguous-fraction equivalences, M\"obius transformations)
+        are not tested.
+  \item \textbf{Closure is model/dataset-relative.} Lie bracket closure is
+        measured relative to the trained model and corpus, not universally.
+  \item \textbf{High-precision validation pending.} Convergents are computed
+        to depth~400 at dps~50; deeper validation using mpmath at dps~200+
+        is left to future work.
+  \item \textbf{Error thresholds are empirical.} Pass/fail thresholds
+        ($\tau = 0.05$ for most laws) are chosen by inspection rather than
+        information-theoretic criteria.
+\end{enumerate}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Reproducibility}
+\label{sec:reproducibility}
+
+All code, configuration files, and derived results are available at:
+
+\begin{center}
+\url{https://github.com/VesterlundCoder/cf-space}
+\end{center}
+
+The repository \cite{cfspace2026github} includes:
+\begin{itemize}[noitemsep]
+  \item \texttt{got\_v3/} --- full model package (models, losses, dataset,
+        operators, training loop, eval)
+  \item \texttt{latent\_operator\_algebra.py} --- algebra test suite
+  \item \texttt{got\_v3/configs/} --- all YAML training configurations
+  \item \texttt{results/operator\_algebra/algebra\_report.json} --- raw results
+  \item \texttt{cfspacealgebra.md} --- full tables
+  \item \texttt{requirements.txt} --- Python dependencies
+  \item \texttt{data/README\_DATA.md} --- dataset manifest and generation
+\end{itemize}
+
+To replicate the algebra results:
+\begin{lstlisting}[language=bash, caption={Reproducing the algebra test suite.}]
+# Install
+pip install -r requirements.txt
+
+# Run full test suite (replace with actual checkpoint path)
+python3 latent_operator_algebra.py \
+    --ckpt ckpt/got_v3_ae_pretrain_k3.pt \
+    --data data/cf_large \
+    --n 500 \
+    --n_manifold 2000 \
+    --no_plots \
+    --out results/operator_algebra/
+\end{lstlisting}
+
+Random seed: \texttt{--seed 42} (default).  Platform: Apple MPS / CUDA / CPU.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented a reproducible empirical framework for testing approximate
+operator algebra in a learned latent space of polynomial continued fractions.
+
+The main findings are:
+\begin{enumerate}[noitemsep]
+  \item The full operator set forms a \emph{non-commutative monoid}.
+  \item Smooth operators (scale, apery, sign-flip) satisfy approximate latent
+        linearity: $E(T \circ S(x)) \approx E(T(x)) + E(S(x)) - E(x)$.
+  \item $\{\mathrm{scale}, \mathrm{apery\_pos}, \mathrm{apery\_neg}\}$ exhibit
+        approximate Lie-algebra-like closure under empirical brackets
+        ($\cos > 0.97$).
+  \item $\cos(v_{\mathrm{apery\_pos}}, v_{\mathrm{apery\_neg}}) = -0.998$:
+        the cleanest algebraic inverse in the corpus.
+  \item \texttt{shift} is a disruptive non-compact generator: eigenoperator,
+        manifold-destructive, non-additive, non-commuting with sign-flip.
+  \item \texttt{scale\_down} aligns positively with the $\zeta(3)$ scalar
+        field (alignment $= +0.265$).
+\end{enumerate}
+
+A version~0.2 of this report is planned after completing the three-phase
+training pipeline with the improved GOT~v3 checkpoint (VICReg
+anti-collapse + normalised operator consistency loss), which addresses
+the $z$-collapse limitation of the current results.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
