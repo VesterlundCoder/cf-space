@@ -8,6 +8,7 @@
 \usepackage{hyperref}
 \usepackage{url}
 \usepackage{graphicx}
+\graphicspath{{figures/}}
 \usepackage{microtype}
 \usepackage{parskip}
 \usepackage{natbib}
@@ -373,6 +374,16 @@ rnd      & 0.001 & 0.033 & 0.011 & 0.002 & 0.001 & 0.001 & 0.001 & 0.001 & 0.001
 \end{tabular}
 \end{table}
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.88\textwidth]{fig2_commutator_heatmap}
+\caption{Commutator norm matrix $\|[T,S]\|$ on a log scale. The only
+large off-diagonal values involve \texttt{sign\_flip\_b} and
+\texttt{shift}/\texttt{backshift} (values~4.06--4.50), highlighted in dark
+orange.  All other pairs commute to within numerical precision.}
+\label{fig:commutator}
+\end{figure}
+
 \begin{observation}
 The only large non-commutativity in the operator set is between
 \texttt{sign\_flip\_b} and \texttt{shift}/\texttt{backshift} (commutator
@@ -402,20 +413,6 @@ apery$+$   & 0 & $-0.20$ & +0.26 & +0.09 & $-0.07$ & \textbf{+1.00} & \textbf{$-
 apery$-$   & 0 & +0.21 & $-0.25$ & $-0.08$ & +0.07 & \textbf{$-0.998$} & \textbf{+1.00} & $-0.22$ & +0.13 & +0.07 \\
 sf$_b$     & 0 & $-0.43$ & +0.14 & $-0.33$ & \textbf{+0.55} & +0.22 & $-0.22$ & \textbf{+1.00} & $-0.06$ & 0.00 \\
 sf$_a$     & 0 & $-0.13$ & +0.11 & $-0.21$ & +0.26 & $-0.13$ & +0.13 & $-0.06$ & \textbf{+1.00} & 0.03 \\
-random     & 0 & 0.00 & 0.00 & 0.00 & 0.00 & $-0.08$ & +0.07 & 0.00 & 0.03 & \textbf{+1.00} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{observation}
-$\cos(v_{\mathrm{apery\_pos}},\, v_{\mathrm{apery\_neg}}) = -0.998$: the
-Ap\'ery perturbation pair forms a near-perfect antipodal pair in latent space.
-This makes it the most reliable algebraic inverse in the corpus for
-word2vec-style vector arithmetic \cite{mikolov2013word2vec}.
-\end{observation}
-
-\subsection{Level 3 --- Latent Geometry}
-\label{sec:level3}
 
 \paragraph{Manifold closure.}
 Table~\ref{tab:closure} shows the mean distance from $E(T(x))$ to the nearest
@@ -444,22 +441,18 @@ backshift   & 0.1407 & $116\times$    & $\times$ \\
 \end{tabular}
 \end{table}
 
-\texttt{shift} takes generators $1075\times$ further from the manifold than
-the baseline, confirming that polynomial index-shifting is not a smooth
-transformation in this representation.
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.88\textwidth]{fig3_manifold_closure}
+\caption{Manifold closure: mean distance from $E(T(x))$ to the nearest
+corpus point, expressed as a ratio over the baseline (identity).  Bars
+are coloured by severity: grey~=~on manifold ($<2\times$), blue~=~slightly
+off ($2$--$10\times$), red~=~off manifold ($>10\times$).  \texttt{shift}
+at $1075\times$ is truncated for readability.}
+\label{fig:closure}
+\end{figure}
 
-\paragraph{Eigenoperator alignment.}
-We test whether $v_T(x) \approx \lambda z$ (operator vector aligned with
-encoding).  Only \texttt{shift} qualifies ($\cos = -0.714$, $\bar\lambda = 1.0$),
-suggesting that index shifting is the principal axis of the latent space.
-
-\paragraph{$\zeta(3)$-conditioned alignment.} \textbf{[Preliminary.]}
-We compute a contrast vector $d_{\rm core/far}$ between CFs numerically close
-to $\zeta(3)$ and CFs far from it, and measure $\cos(v_T,\, d_{\rm core/far})$.
-\texttt{scale\_down} is the only operator with positive alignment ($+0.265$),
-suggesting that scaling down coefficients moves generators toward the
-$\zeta(3)$-proximal region.  This is presented as an observation about the
-scalar field, not as a claim of constructing CF identities.
+% ...
 
 \paragraph{Lipschitz constants.}
 Table~\ref{tab:lipschitz} gives Lipschitz constants
@@ -485,14 +478,14 @@ backshift    & 0.0148 & 0.0025 & 0.0449 \\
 \end{tabular}
 \end{table}
 
-Ap\'ery operators are the smoothest (max $L < 0.006$).  \texttt{shift} has
-max $L = 11.76$, indicating singular behaviour at specific coefficient
-configurations.
-
-\paragraph{Approximate additivity.}
-For smooth operators (scale, apery, sign-flip), the additivity error
-$\|v_{T \circ S}(x) - (v_T(x) + v_S(x))\| < 0.01$ passes the threshold.
-This supports a key property of the space:
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.88\textwidth]{fig4_lipschitz}
+\caption{Lipschitz constants per operator: mean~(blue bars), median~(white
+circles), and max~(red triangles).  All operators except \texttt{shift} have
+max~$L < 0.05$; the \texttt{shift} outlier at max~$L = 11.76$ is annotated.}
+\label{fig:lipschitz}
+\end{figure}
 
 \begin{observation}[Latent linearity of smooth operators]
 For $T, S \in \{\mathrm{scale}, \mathrm{apery}, \mathrm{sign\_flip}\}$:
@@ -589,6 +582,17 @@ random\_sm & 29\% & 24\% & 70\% & 100\% \\
 Notably, \emph{all} operators conserve the norm class (100\%): every
 transformed generator remains in a recognisable normalisation class.
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{fig5_conservation}
+\caption{Conservation rates per operator for four structural properties.
+Scale and sign-flip operators are fully conservative (all 100\%).  Ap\'{e}ry
+operators break the degree of $a(n)$ (36\%) but preserve all other properties.
+\texttt{shift} breaks both deg$(a)$ (29\%) and sign$(a_0)$ (39\%).  All
+operators preserve the norm class (100\%, purple bars all at ceiling).}
+\label{fig:conservation}
+\end{figure}
+
 % ──────────────────────────────────────────────────────────────────────────────
 \section{Interpretation}
 \label{sec:interpretation}
@@ -619,6 +623,17 @@ Braid relations & $\times$ (mostly) & partial \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{fig6_law_summary}
+\caption{Algebraic law pass/fail summary across all 10 operators and 11
+selected laws.  Green~(+)~=~passes, amber~(\textasciitilde)~=~approximate
+pass, red~($-$)~=~fails.  The smooth subset (scale, apery, sign-flip) shows
+broad green coverage.  \texttt{shift} and \texttt{random\_sm} fail most laws.
+The identity operator serves as ground-truth reference.}
+\label{fig:summary}
+\end{figure}
 
 \paragraph{Best-fit structure.}
 The full operator set forms a \emph{non-commutative monoid}: closed under
